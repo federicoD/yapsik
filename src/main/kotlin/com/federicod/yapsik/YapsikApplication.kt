@@ -1,27 +1,20 @@
 package com.federicod.yapsik
 
-import com.federicod.yapsik.plugins.*
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.getBean
-import org.springframework.beans.factory.getBeansOfType
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
-import org.springframework.stereotype.Component
-import java.net.ConnectException
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
-import java.net.SocketTimeoutException
 import java.util.concurrent.Semaphore
-import kotlin.concurrent.thread
 
 @SpringBootApplication
 class YapsikApplication
 
-private val timeout = 1000
-
 // From shodan.io
 private val ipAddresses = listOf(
+	// Smtp
+	"218.216.70.17",
+	"210.198.120.171",
+	"210.129.53.158",
+	"158.201.249.2",
 	// Echo
 	"213.42.99.89",
 	"5.226.109.177",
@@ -55,21 +48,12 @@ private val ipAddresses = listOf(
 	"125.129.172.137"
 )
 
-private val commonPorts = listOf(
-	7, // echo
-	21, // FTP
-	23, // Telnet
-	25, // SMTP
-	9092, // Kafka no TLS
-	6379 // Redis
-)
-
-private val threadsLimitSemaphore : Semaphore = Semaphore(5)
-
 fun main(args: Array<String>) {
 	val appContext = runApplication<YapsikApplication>(*args)
 
-	val scanner = appContext.getBean<Scanner>()
+	// TODO: Assert one plugin per port
+
+	val scanner = appContext.getBean<IpScanner>()
 
 	for (ip in ipAddresses) {
 
@@ -83,11 +67,14 @@ fun main(args: Array<String>) {
 
 			scannedPorts.forEach {
 
-				if (it.value != null) {
-					println("Port ${it.key} opened")
-					println("Application: ${it.value?.applicationType}")
-					println("Valid response: ${it.value?.gotValidResponse}")
-					println()
+				if (it.open) {
+					println("Port ${it.port} is open")
+
+					if (it.fingerprintResult != null) {
+						println("Valid response: ${it.fingerprintResult?.gotValidResponse}")
+						println("Application: ${it.fingerprintResult?.applicationType}")
+						println()
+					}
 				}
 			}
 
@@ -100,58 +87,5 @@ fun main(args: Array<String>) {
 		}
 	}
 }
-
-@Component
-class Scanner(
-	@Autowired private val plugins: List<ApplicationFingerprintPlugin>
-) {
-	fun scanIp(ip: String) : MutableMap<Int, ApplicationFingerprintResult?> {
-
-		// I should probably replace it with a thread-safe collection
-		val scannedPorts = mutableMapOf<Int, ApplicationFingerprintResult?>()
-
-		val threads = commonPorts.map {
-
-			threadsLimitSemaphore.acquire()
-
-			thread {
-
-				val port = it
-				val socket = Socket()
-				var result: ApplicationFingerprintResult? = null
-
-				try {
-					socket.connect(InetSocketAddress(InetAddress.getByName(ip), port), timeout)
-
-					try {
-
-						for (plugin in plugins) {
-							if (plugin.isPortAccepted(port)) {
-								result = plugin.run(socket)
-							}
-						}
-
-						socket.close()
-					} catch (e: Exception) {
-						println(e)
-					}
-				} catch (e: ConnectException) {
-				} catch (e: SocketTimeoutException) {
-				} catch (e: Exception) {
-					println(e)
-				} finally {
-					scannedPorts[port] = result
-
-					threadsLimitSemaphore.release()
-				}
-			}
-		}
-
-		for (t in threads) t.join()
-
-		return scannedPorts
-	}
-}
-
 
 

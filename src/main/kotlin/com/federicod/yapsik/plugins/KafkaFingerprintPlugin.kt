@@ -47,42 +47,32 @@ class KafkaFingerprintPlugin : ApplicationFingerprintPlugin {
             0x00,
         )
 
+        socket.getOutputStream().use { stream ->
+            stream.write(apiVersionsRequest.toByteArray())
+        }
+
         val inputStream = socket.getInputStream()
         val outputStream = socket.getOutputStream()
-        val reader = inputStream.bufferedReader()
 
         outputStream.write(apiVersionsRequest.toByteArray())
 
-        var retries = 0
+        val data = ByteArray(8)
+        val bytesRead = inputStream.read(data, 0, data.size)
 
-        while (retries < 10) {
-            if (!reader.ready()) {
-                Thread.sleep(1000)
-                retries++
-                continue
-            }
+        val responseLength = ByteBuffer.wrap(data.copyOfRange(0, 4)).int
+        val responseCorrelationId = data.copyOfRange(4, 8)
 
-            val data = ByteArray(4096)
-            val bytesRead = inputStream.read(data, 0, data.size)
-
-            val responseLength = ByteBuffer.wrap(data.copyOfRange(0, 4)).int
-            val responseCorrelationId = data.copyOfRange(4, 8)
-
-            // remove the first 4 bytes (used to get the length)
-            if (responseLength != bytesRead - 4) {
-                return ApplicationFingerprintResult(false, name)
-            }
-
-            for (i in responseCorrelationId.indices) {
-                if (responseCorrelationId[i] != cid[i]) {
-                    return ApplicationFingerprintResult(false, name)
-                }
-            }
-
-            return ApplicationFingerprintResult(true, name)
+        // remove the first 4 bytes (used to get the length)
+        if (responseLength != bytesRead - 4) {
+            return ApplicationFingerprintResult(false, name)
         }
 
-        return ApplicationFingerprintResult(false, name)
-    }
+        for (i in responseCorrelationId.indices) {
+            if (responseCorrelationId[i] != cid[i]) {
+                return ApplicationFingerprintResult(false, name)
+            }
+        }
 
+        return ApplicationFingerprintResult(true, name)
+    }
 }

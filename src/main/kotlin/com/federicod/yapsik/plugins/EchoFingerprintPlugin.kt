@@ -10,7 +10,7 @@ class EchoFingerprintPlugin : ApplicationFingerprintPlugin {
 
     private val name = "Echo"
 
-    override fun isPortAccepted(port: Int): Boolean  = port == 7
+    override fun isPortAccepted(port: Int): Boolean = port == 7
 
     override fun run(socket: Socket): ApplicationFingerprintResult {
 
@@ -21,29 +21,10 @@ class EchoFingerprintPlugin : ApplicationFingerprintPlugin {
 
         socket.getOutputStream().write(request)
 
-        val inputStream = socket.getInputStream()
-        val reader = inputStream.bufferedReader()
-        var retries = 0
+        val readData = ByteArray(request.size)
+        val bytesRead = socket.getInputStream().read(readData, 0, readData.size)
+        val validResponse = bytesRead > 0 && String(readData) == String(request)
 
-        while (retries < 10) {
-            if (!reader.ready()) {
-                Thread.sleep(1000)
-                retries++
-                continue
-            }
-
-            val data = CharArray(request.size)
-            val bytesRead = reader.read(data, 0, data.size)
-
-            if (bytesRead > 0) {
-                val dataString = data.filter { it != '\u0000' }.joinToString("")
-
-                if (dataString == String(request)) {
-                    return ApplicationFingerprintResult(true, name)
-                }
-            }
-        }
-
-        return ApplicationFingerprintResult(false, name)
+        return ApplicationFingerprintResult(validResponse, name)
     }
 }

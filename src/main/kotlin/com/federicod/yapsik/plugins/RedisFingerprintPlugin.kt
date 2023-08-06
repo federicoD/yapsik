@@ -25,32 +25,19 @@ class RedisFingerprintPlugin : ApplicationFingerprintPlugin {
 
         socket.getOutputStream().write(ping)
 
-        val nullByte : Byte = 0x0
         val inputStream = socket.getInputStream()
-        var retries = 0
 
-        while (retries < 10) {
+        // I was using inputStream.readBytes() before but the process started hanging
+        // https://discuss.kotlinlang.org/t/reading-socket-inputstream-hangs-the-whole-program/20988
 
-            // I was using inputStream.readBytes() before but the process started hanging
-            // https://discuss.kotlinlang.org/t/reading-socket-inputstream-hangs-the-whole-program/20988
+        val data = ByteArray(7)
+        val bytesRead = inputStream.read(data, 0, data.size)
 
-            val data = ByteArray(100)
-            val bytesRead = inputStream.read(data, 0, data.size)
+        if (bytesRead == 7) {
 
-            if (bytesRead == 0) {
-                Thread.sleep(1000)
-                retries++
-                continue
+            if (data.copyOfRange(0, 7).contentEquals(pong)) {
+                return ApplicationFingerprintResult(true, name)
             }
-
-            if (bytesRead == 7) {
-
-                if (data.copyOfRange(0, 7).contentEquals(pong)) {
-                    return ApplicationFingerprintResult(true, name)
-                }
-            }
-
-            return ApplicationFingerprintResult(false, name)
         }
 
         return ApplicationFingerprintResult(false, name)

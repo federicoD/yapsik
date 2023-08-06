@@ -6,27 +6,29 @@ import org.springframework.stereotype.Component
 import java.net.Socket
 
 @Component
-class TelnetFingerprintPlugin : ApplicationFingerprintPlugin {
+class SmtpFingerprintPlugin : ApplicationFingerprintPlugin {
 
-    private val name = "Telnet"
+    private val name = "Smtp"
 
-    override fun isPortAccepted(port: Int): Boolean = port == 23
+    override fun isPortAccepted(port: Int): Boolean = port == 25
 
     override fun run(socket: Socket): ApplicationFingerprintResult {
 
-        val inputStream = socket.getInputStream()
+        val validResponses = arrayOf(
+            "220", "421", "500", "501", "504"
+        )
 
-        val data = ByteArray(1024)
-        val bytesRead = inputStream.read(data, 0, data.size)
+        val data = ByteArray(3)
 
-        if (bytesRead > 0) {
+        val bytesRead = socket.getInputStream().read(data, 0, data.size)
+
+        if (bytesRead == data.size) {
+
             val dataString = String(data)
 
-            if (dataString.indexOf("telnet", 0, true) != -1) {
+            if (dataString in validResponses) {
                 return ApplicationFingerprintResult(true, name)
             }
-
-            return ApplicationFingerprintResult(false, name)
         }
 
         return ApplicationFingerprintResult(false, name)
